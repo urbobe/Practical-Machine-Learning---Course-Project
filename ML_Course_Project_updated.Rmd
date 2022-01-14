@@ -1,0 +1,103 @@
+---
+title: "Practical Machine Learning, Week 4, Prediction Assignment"
+author: "Urban Öberg"
+date: '2022-01-13'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes. Participants were supervised by an experienced weight lifter to make sure the execution complied to the manner they were supposed to simulate. The exercises were performed by six male participants aged between 20-28 years, with little weight lifting experience. We made sure that all participants could easily simulate the mistakes in a safe and controlled manner by using a relatively light dumbbell (1.25kg).
+Read more: http:/groupware.les.inf.puc-rio.br/har#ixzz4Tjq04yaY
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases. 
+
+## Load libraries, data and remove NAs
+```{r lib, echo=FALSE}
+library(caret);library(randomForest);library(PRP)
+library(rpart);library(rpart.plot);library(corrplot)
+```
+
+```{r 2}
+# Load data sets and set all "N/A","NA","#DIV/0!","" to "NA"
+train = read.csv("~/R/Data_science_course/8 ML/8_ML_course_project/pml-training.csv",na.strings=c("N/A","NA","#DIV/0!",""))
+test = read.csv("~/R/Data_science_course/8 ML/8_ML_course_project/pml-testing.csv",na.strings=c("N/A","NA","#DIV/0!",""))
+
+#column 1-7 are not needed
+train <- train[,8:length(colnames(train))]
+test <- test[,8:length(colnames(test))]
+
+#also remove columns with NA
+train_clean <- train[, colSums(is.na(train)) == 0] 
+test_clean <- test[, colSums(is.na(test)) == 0] 
+```
+
+## Create training and validation set
+```{r p2}
+#split train-set into training and validation
+inTrain <- createDataPartition(train_clean$classe,p=0.7, list=FALSE)
+training <- train_clean[inTrain,]
+validation <- train_clean[-inTrain,]
+```
+
+## Test with four different models
+Test with 4 different models: Decision Tree (DT), Support Vector Machine(SVM), Bootstrap aggregating (Bagging) and Random Forest (RF).
+Use 3-fold cross validation.
+
+```{r m}
+control <- trainControl(method="cv", number=3, verboseIter=F)
+```
+
+```{r m1}
+# DT model
+dt_model <- train(classe~., data=training, method="rpart",trControl=control,tuneLength = 5)
+pred_dt <- predict(dt_model, validation)
+cm_dt <- confusionMatrix(pred_dt, factor(validation$classe))
+cm_dt
+```
+
+```{r m2}
+# SVM model
+svm_model <- train(classe~., data=training, method="svmLinear",trControl=control,tuneLength = 5, verbose = F)
+pred_svm <- predict(svm_model, validation)
+cm_svm <- confusionMatrix(pred_svm, factor(validation$classe))
+cm_svm
+```
+
+```{r m3}
+# Bagging model
+bag_model <- train(classe~., data=training, method="treebag",trControl=control,tuneLength = 5)
+pred_bag <- predict(bag_model, validation)
+cm_bag <- confusionMatrix(pred_bag, factor(validation$classe))
+cm_bag
+```
+
+
+```{r m4}
+# RF model
+set.seed(999)
+rf_model <- train(classe ~ ., data=training, method="rf",trControl=control, ntree=251)
+pred_rf <- predict(rf_model, validation)
+cm_rf <- confusionMatrix(pred_rf, factor(validation$classe))
+cm_rf
+```
+RF is the model that performs best and DT is the worst. The accuracy for RF is 0.9905 and the in-sample error rate 0,0095. Let's use tuned RF model on the test set.
+
+## Finally, predict on test set
+```{r p5}
+# predict on test set
+ptest <- predict(rf_model, test_clean)
+ptest
+```
+
+## Extra, tree plot
+```{r p6}
+# graphical tree plot
+rf_model_plot <- rpart(classe ~ ., data=train_clean, method="class")
+prp(rf_model_plot)
+```
